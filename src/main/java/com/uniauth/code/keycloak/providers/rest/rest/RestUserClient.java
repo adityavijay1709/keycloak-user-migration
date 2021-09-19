@@ -9,10 +9,10 @@ import javax.ws.rs.core.Response;
 public interface RestUserClient {
 
     @GET
-    @Path("/{username}")
+    @Path("/{username}/")
     Response findByUsername(@PathParam("username") String username);
 
     @POST
-    @Path("/{username}")
+    @Path("/{username}/")
     Response validatePassword(@PathParam("username") String username, UserPasswordDto passwordDto);
 }
