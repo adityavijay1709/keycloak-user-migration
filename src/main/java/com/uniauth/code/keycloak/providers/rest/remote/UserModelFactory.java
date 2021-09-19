@@ -69,6 +69,7 @@ public class UserModelFactory {
         }
 
         validateUsernamesEqual(legacyUser, userModel);
+        LOG.infof("FederationLink found: %s",model.getId());
 
         userModel.setFederationLink(model.getId());
         userModel.setEnabled(legacyUser.isEnabled());
