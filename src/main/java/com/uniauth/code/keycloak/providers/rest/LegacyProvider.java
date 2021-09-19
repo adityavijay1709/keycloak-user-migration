@@ -107,7 +107,7 @@ public class LegacyProvider implements UserStorageProvider,
     public boolean updateCredential(RealmModel realm, UserModel user, CredentialInput input) {
         String link = user.getFederationLink();
         if (link != null && !link.isEmpty()) {
-            user.setFederationLink(null);
+//            user.setFederationLink(null);
         }
         return false;
     }
