@@ -137,4 +137,10 @@ public class LegacyUser {
         return Objects.hash(id, username, email, firstName, lastName, isEnabled, isEmailVerified, attributes,
                 roles, groups, requiredActions);
     }
+
+    @Override public String toString() {
+        return "LegacyUser{" + "id='" + id + '\'' + ", username='" + username + '\'' + ", email='" + email + '\'' + ", firstName='" + firstName + '\'' + ", lastName='" + lastName
+                + '\'' + ", isEnabled=" + isEnabled + ", isEmailVerified=" + isEmailVerified + ", attributes=" + attributes + ", roles=" + roles + ", groups=" + groups
+                + ", requiredActions=" + requiredActions + '}';
+    }
 }

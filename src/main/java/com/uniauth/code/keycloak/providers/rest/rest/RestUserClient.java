@@ -12,7 +12,15 @@ public interface RestUserClient {
     @Path("/{username}/")
     Response findByUsername(@PathParam("username") String username);
 
+    @GET
+    @Path("/{phone}/")
+    Response findByPhone(@PathParam("phone") String phone);
+
     @POST
     @Path("/{username}/")
     Response validatePassword(@PathParam("username") String username, UserPasswordDto passwordDto);
+
+    @POST
+    @Path("/password/reset")
+    Response updatePassword(UpdatePasswordDto updatePasswordDto);
 }

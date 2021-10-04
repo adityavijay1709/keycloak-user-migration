@@ -3,13 +3,16 @@ package com.uniauth.code.keycloak.providers.rest;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUser;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUserService;
 import com.uniauth.code.keycloak.providers.rest.remote.UserModelFactory;
+import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import org.keycloak.component.ComponentModel;
 import org.keycloak.credential.CredentialInput;
 import org.keycloak.credential.CredentialInputUpdater;
 import org.keycloak.credential.CredentialInputValidator;
+import org.keycloak.credential.CredentialModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.credential.PasswordCredentialModel;
 import org.keycloak.storage.UserStorageProvider;
@@ -69,7 +72,10 @@ public class LegacyProvider implements UserStorageProvider,
         }
 
         String userIdentifier = getUserIdentifier(userModel);
-        if (legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
+        LOG.info(session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel,userModel,"password").map(credentialModel -> credentialModel.getType()+" : "+credentialModel.getCredentialData()).collect(Collectors.toList()));
+        long localStorePasswordCount = session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel,userModel,"password").count();
+        if (localStorePasswordCount==0 && legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
+            LOG.info("Password validated from Provider for user-email: "+userModel.getEmail());
             session.userCredentialManager().updateCredential(realmModel, userModel, input);
             return true;
         }
@@ -105,10 +111,13 @@ public class LegacyProvider implements UserStorageProvider,
 
     @Override
     public boolean updateCredential(RealmModel realm, UserModel user, CredentialInput input) {
-        String link = user.getFederationLink();
-        if (link != null && !link.isEmpty()) {
-//            user.setFederationLink(null);
-        }
+        if (!(input instanceof UserCredentialModel))
+            return false;
+        if (!input.getType().equals(CredentialModel.PASSWORD))
+            return false;
+        UserCredentialModel cred = (UserCredentialModel) input;
+        LOG.info("Updating the password for email: " + user.getEmail() + " and password: " + input.getChallengeResponse());
+        legacyUserService.updatePassword(user.getEmail(), cred.getValue());
         return false;
     }
 
