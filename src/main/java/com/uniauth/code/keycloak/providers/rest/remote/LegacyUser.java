@@ -9,7 +9,6 @@ import java.util.Objects;
  */
 public class LegacyUser {
 
-    private String id;
     private String username;
     private String email;
     private String firstName;
@@ -21,13 +20,6 @@ public class LegacyUser {
     private List<String> groups;
     private List<String> requiredActions;
 
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
 
     public String getUsername() {
         return username;
@@ -121,7 +113,7 @@ public class LegacyUser {
 
         return isEnabled == legacyUser.isEnabled &&
                 isEmailVerified == legacyUser.isEmailVerified &&
-                Objects.equals(id, legacyUser.id) &&
+
                 Objects.equals(username, legacyUser.username) &&
                 Objects.equals(email, legacyUser.email) &&
                 Objects.equals(firstName, legacyUser.firstName) &&
@@ -134,12 +126,12 @@ public class LegacyUser {
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, username, email, firstName, lastName, isEnabled, isEmailVerified, attributes,
+        return Objects.hash( username, email, firstName, lastName, isEnabled, isEmailVerified, attributes,
                 roles, groups, requiredActions);
     }
 
     @Override public String toString() {
-        return "LegacyUser{" + "id='" + id + '\'' + ", username='" + username + '\'' + ", email='" + email + '\'' + ", firstName='" + firstName + '\'' + ", lastName='" + lastName
+        return "LegacyUser{" + " username='" + username + '\'' + ", email='" + email + '\'' + ", firstName='" + firstName + '\'' + ", lastName='" + lastName
                 + '\'' + ", isEnabled=" + isEnabled + ", isEmailVerified=" + isEmailVerified + ", attributes=" + attributes + ", roles=" + roles + ", groups=" + groups
                 + ", requiredActions=" + requiredActions + '}';
     }

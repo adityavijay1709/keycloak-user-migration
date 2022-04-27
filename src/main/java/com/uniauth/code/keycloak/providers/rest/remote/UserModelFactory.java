@@ -54,23 +54,17 @@ public class UserModelFactory {
 
     public UserModel create(LegacyUser legacyUser, RealmModel realm) {
         LOG.infof("Creating user model for: %s", legacyUser.getUsername());
+        UserModel userModel = null;
 
-        UserModel userModel;
-        if (isEmpty(legacyUser.getId())) {
-            userModel = session.userLocalStorage().addUser(realm, legacyUser.getUsername());
-        } else {
-            userModel = session.userLocalStorage().addUser(
-                    realm,
-                    legacyUser.getId(),
-                    legacyUser.getUsername(),
-                    true,
-                    false
-            );
-        }
+        userModel = session.userLocalStorage().getUserByEmail(realm,legacyUser.getEmail());
+        if(userModel!=null)
+            return userModel;
+
+        userModel =  session.userLocalStorage().addUser(realm, legacyUser.getUsername());
 
         validateUsernamesEqual(legacyUser, userModel);
         LOG.infof("FederationLink found: %s",model.getId());
-
+        userModel.setUsername(legacyUser.getUsername());
         userModel.setFederationLink(model.getId());
         userModel.setEnabled(legacyUser.isEnabled());
         userModel.setEmail(legacyUser.getEmail());

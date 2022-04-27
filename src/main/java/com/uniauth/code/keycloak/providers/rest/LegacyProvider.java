@@ -1,5 +1,6 @@
 package com.uniauth.code.keycloak.providers.rest;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUser;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUserService;
 import com.uniauth.code.keycloak.providers.rest.remote.UserModelFactory;
@@ -48,25 +49,40 @@ public class LegacyProvider implements UserStorageProvider,
 
     @Override
     public UserModel getUserByUsername(String username, RealmModel realm) {
-        return getUserModel(realm, username, () -> legacyUserService.findByUsername(username));
+        LOG.warnf("Getting user from external repository: %s", username);
+        LegacyUser legacyUser = null;
+        try {
+            legacyUser = legacyUserService.findByUsername(username);
+        } catch (JsonProcessingException e) {
+            LOG.error("Error in fetching user from repository e {}",e);
+        }
+        if(legacyUser==null)
+            return null;
+        else{
+            return userModelFactory.create(legacyUser, realm);
+        }
     }
 
-    private UserModel getUserModel(RealmModel realm, String username, Supplier<Optional<LegacyUser>> user) {
-        return user.get()
-                .map(u -> userModelFactory.create(u, realm))
-                .orElseGet(() -> {
-                    LOG.warnf("User not found in external repository: %s", username);
-                    return null;
-                });
-    }
 
     @Override
     public UserModel getUserByEmail(String email, RealmModel realm) {
-        return getUserModel(realm, email, () -> legacyUserService.findByEmail(email));
+        LOG.warn("getUserByEmail with email: "+ email);
+        LegacyUser legacyUser = null;
+        try {
+            legacyUser = legacyUserService.findByEmail(email);
+        } catch (JsonProcessingException e) {
+            LOG.error("Error in fetching user from repository e {}",e);
+        }
+        if(legacyUser==null)
+            return null;
+        else{
+            return userModelFactory.create(legacyUser, realm);
+        }
     }
 
     @Override
     public boolean isValid(RealmModel realmModel, UserModel userModel, CredentialInput input) {
+        LOG.warn("isValid called");
         if (!supportsCredentialType(input.getType())) {
             return false;
         }
@@ -74,8 +90,9 @@ public class LegacyProvider implements UserStorageProvider,
         String userIdentifier = getUserIdentifier(userModel);
         LOG.info(session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel,userModel,"password").map(credentialModel -> credentialModel.getType()+" : "+credentialModel.getCredentialData()).collect(Collectors.toList()));
         long localStorePasswordCount = session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel,userModel,"password").count();
+        LOG.warn("last called with localStorePasswordCount: " +localStorePasswordCount);
         if (localStorePasswordCount==0 && legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
-            LOG.info("Password validated from Provider for user-email: "+userModel.getEmail());
+            LOG.warn("Password validated from Provider for user-email: "+userModel.getEmail());
             session.userCredentialManager().updateCredential(realmModel, userModel, input);
             return true;
         }
@@ -86,7 +103,7 @@ public class LegacyProvider implements UserStorageProvider,
     private String getUserIdentifier(UserModel userModel) {
         String userIdConfig = model.getConfig().getFirst(ConfigurationProperties.USE_USER_ID_FOR_CREDENTIAL_VERIFICATION);
         boolean useUserId = Boolean.parseBoolean(userIdConfig);
-        return useUserId ? userModel.getId() : userModel.getUsername();
+        return useUserId ? userModel.getId() : userModel.getEmail();
     }
 
     @Override
@@ -96,6 +113,9 @@ public class LegacyProvider implements UserStorageProvider,
 
     @Override
     public UserModel getUserById(String id, RealmModel realm) {
+
+        LOG.warnf("getUserById from external repository: %s", id);
+
         throw new UnsupportedOperationException("User lookup by id not implemented");
     }
 
@@ -116,7 +136,7 @@ public class LegacyProvider implements UserStorageProvider,
         if (!input.getType().equals(CredentialModel.PASSWORD))
             return false;
         UserCredentialModel cred = (UserCredentialModel) input;
-        LOG.info("Updating the password for email: " + user.getEmail() + " and password: " + input.getChallengeResponse());
+        LOG.warn("Updating the password for email: " + user.getEmail() + " and password: " + input.getChallengeResponse());
         legacyUserService.updatePassword(user.getEmail(), cred.getValue());
         return false;
     }
