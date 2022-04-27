@@ -1,5 +1,7 @@
 package com.uniauth.code.keycloak.providers.rest.rest;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uniauth.code.keycloak.providers.rest.ConfigurationProperties;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUser;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUserService;
@@ -14,24 +16,28 @@ import org.keycloak.component.ComponentModel;
 public class RestUserService implements LegacyUserService {
     private static final Logger LOG = Logger.getLogger(RestUserService.class);
 
-    private final RestUserClient client;
+    private  static Client client;
+    private  static String uri;
 
     public RestUserService(ComponentModel model, Client restEasyClient) {
-        String uri = model.getConfig().getFirst(ConfigurationProperties.URI_PROPERTY);
-        boolean tokenAuthEnabled = Boolean.parseBoolean(model.getConfig().getFirst(ConfigurationProperties.API_TOKEN_ENABLED_PROPERTY));
+         uri = model.getConfig().getFirst(ConfigurationProperties.URI_PROPERTY);
+        client = restEasyClient;
+         boolean tokenAuthEnabled = Boolean.parseBoolean(model.getConfig().getFirst(ConfigurationProperties.API_TOKEN_ENABLED_PROPERTY));
         if (tokenAuthEnabled) {
             String token = model.getConfig().getFirst(ConfigurationProperties.API_TOKEN_PROPERTY);
-            registerBearerTokenRequestFilter(restEasyClient, token);
+            client = registerBearerTokenRequestFilter(restEasyClient, token);
         }
         boolean basicAuthEnabled = Boolean.parseBoolean(model.getConfig().getFirst(ConfigurationProperties.API_HTTP_BASIC_ENABLED_PROPERTY));
         if (basicAuthEnabled) {
             String basicAuthUser = model.getConfig().getFirst(ConfigurationProperties.API_HTTP_BASIC_USERNAME_PROPERTY);
             String basicAuthPassword = model.getConfig().getFirst(ConfigurationProperties.API_HTTP_BASIC_PASSWORD_PROPERTY);
-            registerBasicAuthFilter(restEasyClient, basicAuthUser, basicAuthPassword);
+            client = registerBasicAuthFilter(restEasyClient, basicAuthUser, basicAuthPassword);
         }
-        this.client = buildClient(restEasyClient, uri);
-    }
 
+    }
+    public RestUserService(){
+
+    }
     private Client registerBasicAuthFilter(Client restEasyClient, String basicAuthUser, String basicAuthPassword) {
         if (basicAuthUser != null
                 && !basicAuthUser.isEmpty()
@@ -49,32 +55,50 @@ public class RestUserService implements LegacyUserService {
         return restEasyClient;
     }
 
-    private RestUserClient buildClient(Client restEasyClient, String uri) {
+    private RestUserClient buildClient( String uri) {
 
-        ResteasyWebTarget target = (ResteasyWebTarget) restEasyClient.target(uri);
+        ResteasyWebTarget target = (ResteasyWebTarget) this.client.target(uri);
         return target.proxy(RestUserClient.class);
     }
 
     @Override
-    public Optional<LegacyUser> findByEmail(String email) {
+    public LegacyUser findByEmail(String email) throws JsonProcessingException {
         return findByUsername(email);
     }
 
     @Override
-    public Optional<LegacyUser> findByUsername(String username) {
-        final Response response = client.findByPhone(username);
+    public LegacyUser findByUsername(String username) throws JsonProcessingException {
+        RestUserClient r = buildClient(uri+"phone");
+        Response response = r.findByPhone(username);
         if (response.getStatus() != 200) {
-            return Optional.empty();
+            r = buildClient(uri+"username");
+            response = r.findByUsername(username);
+            if (response.getStatus() != 200)
+                return null;
         }
 
-        LOG.info("findByUsername: "+username+" response: "+response.readEntity(LegacyUser.class).toString());
-        return Optional.ofNullable(response.readEntity(LegacyUser.class));
+        Optional<String> json = Optional.ofNullable(response.readEntity(String.class));
+        if(json.get()!=null){
+            ObjectMapper mapper = new ObjectMapper();
+            LegacyUser legacyUser = mapper.readValue(json.get(), LegacyUser.class);
+            LOG.info(legacyUser.toString());
+            return legacyUser;
+        }
+        return null;
     }
 
     @Override
     public boolean isPasswordValid(String username, String password) {
-        final Response response = client.validatePassword(username, new UserPasswordDto(password));
+        RestUserClient r = buildClient(uri+"validate");
+        final Response response = r.validatePassword(username, new UserPasswordDto(password));
+        LOG.warn("Reponse from isValid:"+response.getStatus());
         return response.getStatus() == 200;
+    }
+    public static void main(String[] args){
+        RestUserService ru = new RestUserService();
+        RestUserClient r = ru.buildClient("http://tarun.unicommerce.com:8088/data/user/migration/validate");
+        final Response response = r.validatePassword("arunkund@unicom.com", new UserPasswordDto("test"));
+        System.out.println(response);
     }
 
     /**
@@ -88,8 +112,9 @@ public class RestUserService implements LegacyUserService {
         updatePasswordDto.setEmail(email);
         updatePasswordDto.setPassword(password);
         updatePasswordDto.setConfirmPassword(password);
-        final Response response = client.updatePassword(updatePasswordDto);
-        LOG.info("update password response for: "+email+" : "+response.getEntity().toString());
+        RestUserClient r = buildClient(uri+"password/reset");
+        final Response response = r.updatePassword(updatePasswordDto);
+        LOG.info("update password response for: "+email);
         return response.getStatus()==200;
     }
 }

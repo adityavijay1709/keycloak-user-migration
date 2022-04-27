@@ -1,5 +1,7 @@
 package com.uniauth.code.keycloak.providers.rest.remote;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 import java.util.Optional;
 
 /**
@@ -13,7 +15,7 @@ public interface LegacyUserService {
      * @param email email address to search user by.
      * @return Optional of legacy user.
      */
-    Optional<LegacyUser> findByEmail(String email);
+   LegacyUser findByEmail(String email) throws JsonProcessingException;
 
     /**
      * Find user by username.
@@ -21,7 +23,7 @@ public interface LegacyUserService {
      * @param username username to search user by.
      * @return Optional of legacy user.
      */
-    Optional<LegacyUser> findByUsername(String username);
+   LegacyUser findByUsername(String username) throws JsonProcessingException;
 
     /**
      * Validate given password in legacy user provider.
