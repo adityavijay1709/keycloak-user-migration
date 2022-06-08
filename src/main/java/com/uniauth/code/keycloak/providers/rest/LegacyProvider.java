@@ -4,6 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUser;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUserService;
 import com.uniauth.code.keycloak.providers.rest.remote.UserModelFactory;
+
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import org.keycloak.component.ComponentModel;
@@ -19,10 +24,10 @@ import org.keycloak.models.credential.PasswordCredentialModel;
 import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.user.UserLookupProvider;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import java.util.Collections;
-import java.util.Optional;
 import java.util.Set;
-import java.util.function.Supplier;
 
 /**
  * Provides legacy user migration functionality
@@ -38,6 +43,7 @@ public class LegacyProvider implements UserStorageProvider,
     private final LegacyUserService legacyUserService;
     private final UserModelFactory  userModelFactory;
     private final ComponentModel    model;
+    private static final char[]     HEX                      = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
 
     public LegacyProvider(KeycloakSession session, LegacyUserService legacyUserService,
                           UserModelFactory userModelFactory, ComponentModel model) {
@@ -70,6 +76,9 @@ public class LegacyProvider implements UserStorageProvider,
         LegacyUser legacyUser = null;
         try {
             legacyUser = legacyUserService.findByEmail(email);
+            if(legacyUser.getUsername()==null){
+                legacyUser.setUsername(legacyUser.getEmail());
+            }
         } catch (JsonProcessingException e) {
             LOG.error("Error in fetching user from repository e {}",e);
         }
@@ -136,9 +145,17 @@ public class LegacyProvider implements UserStorageProvider,
         if (!input.getType().equals(CredentialModel.PASSWORD))
             return false;
         UserCredentialModel cred = (UserCredentialModel) input;
-        LOG.warn("Updating the password for email: " + user.getEmail() + " and password: " + input.getChallengeResponse());
-        legacyUserService.updatePassword(user.getEmail(), cred.getValue());
-        return false;
+//        LOG.warn("Updating the password for email: " + user.getEmail() + " and password: " + input.getChallengeResponse());
+        String encPassword = pbkdf2Encode(cred.getValue(), user.getEmail());
+
+        StringBuilder shellCommand = new StringBuilder("mysql -uroot -puniware -h db.stgauth.test.unicommerce.infra -D uniauth -se \"UPDATE user SET password='");
+        shellCommand.append(encPassword);
+        shellCommand.append("' WHERE email='");
+        shellCommand.append(user.getEmail()+"'\"");
+
+        LOG.warn("Shell Command:" + shellCommand.toString());
+        executeShell(shellCommand.toString());
+        return true;
     }
 
     @Override
@@ -149,6 +166,47 @@ public class LegacyProvider implements UserStorageProvider,
     @Override
     public Set<String> getDisableableCredentialTypes(RealmModel realm, UserModel user) {
         return Collections.emptySet();
+    }
+
+    private void executeShell(String command) {
+            ProcessBuilder processBuilder = new ProcessBuilder();
+            processBuilder.command("bash", "-c", command);
+        try {
+            Process process = processBuilder.start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static String pbkdf2Encode(String text, String salt) {
+        try {
+            PBEKeySpec spec = new PBEKeySpec(text.toCharArray(), salt.getBytes("UTF-8"), 10000, 128);
+            return hexEncode(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512").generateSecret(spec).getEncoded());
+        } catch (UnsupportedEncodingException e) {
+            LOG.error("Error while encoding key", e);
+            throw new IllegalStateException("UTF-8 not supported!");
+        } catch (InvalidKeySpecException e) {
+            LOG.error("Error while encoding key", e);
+            throw new IllegalStateException(e);
+        } catch (NoSuchAlgorithmException e) {
+            LOG.error("No Such Algorithm while encoding key", e);
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String hexEncode(byte[] bytes) {
+        final int nBytes = bytes.length;
+        char[] result = new char[2 * nBytes];
+
+        int j = 0;
+        for (int i = 0; i < nBytes; i++) {
+            // Char for top 4 bits
+            result[j++] = HEX[(0xF0 & bytes[i]) >>> 4];
+            // Bottom 4
+            result[j++] = HEX[(0x0F & bytes[i])];
+        }
+
+        return new String(result);
     }
 
 }

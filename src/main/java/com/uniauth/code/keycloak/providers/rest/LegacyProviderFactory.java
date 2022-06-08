@@ -1,7 +1,7 @@
 package com.uniauth.code.keycloak.providers.rest;
 
 import com.uniauth.code.keycloak.providers.rest.remote.UserModelFactory;
-import com.uniauth.code.keycloak.providers.rest.rest.CustomUserStorageProviderFactory;
+//import com.uniauth.code.keycloak.providers.rest.rest.CustomUserStorageProviderFactory;
 import com.uniauth.code.keycloak.providers.rest.rest.RestUserService;
 import org.keycloak.component.ComponentModel;
 import org.keycloak.models.KeycloakSession;
@@ -32,7 +32,7 @@ public class LegacyProviderFactory implements UserStorageProviderFactory<LegacyP
             Field modifiers = field.getClass().getDeclaredField("modifiers");
             modifiers.setAccessible(true);
             modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-            field.set(userProvider, 10000L);
+            field.set(userProvider, 60000L);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -41,7 +41,7 @@ public class LegacyProviderFactory implements UserStorageProviderFactory<LegacyP
         return new LegacyProvider(session, restService, userModelFactory, model);
     }
 
-    //@Override
+    @Override
     public void onCreate(KeycloakSession session, RealmModel realm, ComponentModel model) {
         UserProvider userProvider = session.userStorageManager();
 
@@ -51,7 +51,7 @@ public class LegacyProviderFactory implements UserStorageProviderFactory<LegacyP
             Field modifiers = field.getClass().getDeclaredField("modifiers");
             modifiers.setAccessible(true);
             modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-            field.set(userProvider, 5000L);
+            field.set(userProvider, 60000L);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
