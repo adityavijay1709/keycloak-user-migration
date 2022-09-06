@@ -5,7 +5,9 @@ import com.uniauth.code.keycloak.providers.rest.remote.LegacyUser;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUserService;
 import com.uniauth.code.keycloak.providers.rest.remote.UserModelFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
@@ -76,15 +78,15 @@ public class LegacyProvider implements UserStorageProvider,
         LegacyUser legacyUser = null;
         try {
             legacyUser = legacyUserService.findByEmail(email);
-            if(legacyUser.getUsername()==null){
-                legacyUser.setUsername(legacyUser.getEmail());
-            }
         } catch (JsonProcessingException e) {
             LOG.error("Error in fetching user from repository e {}",e);
         }
         if(legacyUser==null)
             return null;
         else{
+            if(legacyUser.getUsername()==null){
+                legacyUser.setUsername(legacyUser.getEmail());
+            }
             return userModelFactory.create(legacyUser, realm);
         }
     }
@@ -146,9 +148,17 @@ public class LegacyProvider implements UserStorageProvider,
             return false;
         UserCredentialModel cred = (UserCredentialModel) input;
 //        LOG.warn("Updating the password for email: " + user.getEmail() + " and password: " + input.getChallengeResponse());
-        String encPassword = pbkdf2Encode(cred.getValue(), user.getEmail());
 
-        StringBuilder shellCommand = new StringBuilder("mysql -uroot -puniware -h db.stgauth.test.unicommerce.infra -D uniauth -se \"UPDATE user SET password='");
+        //Get Salt
+        StringBuilder shellCommand = new StringBuilder("mysql -uuniware -puniware@123 -h db.uniauth.unicommerce.infra -D uniauth -Nse \"SELECT salt FROM user");
+        shellCommand.append(" WHERE email='");
+        shellCommand.append(user.getEmail()+"'\"");
+        LOG.warn("Shell Command:" + shellCommand.toString());
+        String salt = executeShellWithOutput(shellCommand.toString());
+
+        String encPassword = pbkdf2Encode(cred.getValue(), salt);
+
+        shellCommand = new StringBuilder("mysql -uuniware -puniware@123 -h db.uniauth.unicommerce.infra -D uniauth -se \"UPDATE user SET password='");
         shellCommand.append(encPassword);
         shellCommand.append("' WHERE email='");
         shellCommand.append(user.getEmail()+"'\"");
@@ -176,6 +186,27 @@ public class LegacyProvider implements UserStorageProvider,
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private String executeShellWithOutput(String command) {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command("bash", "-c", command);
+        String result = "";
+        try {
+            Process process = processBuilder.start();
+            BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(process.getInputStream()));
+            StringBuilder builder = new StringBuilder();
+            String line = null;
+            while ( (line = reader.readLine()) != null) {
+                    builder.append(line.trim());
+            }
+            result = builder.toString();
+            return result;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return result;
     }
 
     private static String pbkdf2Encode(String text, String salt) {

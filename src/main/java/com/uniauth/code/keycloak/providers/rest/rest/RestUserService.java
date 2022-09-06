@@ -112,7 +112,7 @@ public class RestUserService implements LegacyUserService {
         updatePasswordDto.setEmail(email);
         updatePasswordDto.setPassword(password);
         updatePasswordDto.setConfirmPassword(password);
-        RestUserClient r = buildClient(uri+"password/reset");
+        RestUserClient r = buildClient(uri.substring(0, uri.length()-1));
         final Response response = r.updatePassword(updatePasswordDto);
         LOG.info("update password response for: "+email);
         return response.getStatus()==200;
