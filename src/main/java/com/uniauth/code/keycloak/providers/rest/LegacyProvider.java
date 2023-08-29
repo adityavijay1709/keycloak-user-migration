@@ -23,6 +23,8 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.credential.PasswordCredentialModel;
+import org.keycloak.policy.PasswordPolicyManagerProvider;
+import org.keycloak.policy.PolicyError;
 import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.user.UserLookupProvider;
 
@@ -93,22 +95,24 @@ public class LegacyProvider implements UserStorageProvider,
 
     @Override
     public boolean isValid(RealmModel realmModel, UserModel userModel, CredentialInput input) {
-        LOG.warn("isValid called");
-        if (!supportsCredentialType(input.getType())) {
+        LOG.warn("Validating User Credentials");
+        if (!this.supportsCredentialType(input.getType())) {
             return false;
+        } else {
+            String userIdentifier = this.getUserIdentifier(userModel);
+            LOG.info(this.session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel, userModel, "password").map((credentialModel) -> {
+                return credentialModel.getType() + " : " + credentialModel.getCredentialData();
+            }).collect(Collectors.toList()));
+            long localStorePasswordCount = this.session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel, userModel, "password").count();
+            if (localStorePasswordCount == 0L && this.legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
+                LOG.warn("Correct password entered for user-email: " + userModel.getEmail());
+                this.session.userCredentialManager().updateCredential(realmModel, userModel, input);
+                return true;
+            } else {
+                LOG.warn("Incorrect passsword entered for user-email: " + userModel.getEmail());
+                return false;
+            }
         }
-
-        String userIdentifier = getUserIdentifier(userModel);
-        LOG.info(session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel,userModel,"password").map(credentialModel -> credentialModel.getType()+" : "+credentialModel.getCredentialData()).collect(Collectors.toList()));
-        long localStorePasswordCount = session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel,userModel,"password").count();
-        LOG.warn("last called with localStorePasswordCount: " +localStorePasswordCount);
-        if (localStorePasswordCount==0 && legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
-            LOG.warn("Password validated from Provider for user-email: "+userModel.getEmail());
-            session.userCredentialManager().updateCredential(realmModel, userModel, input);
-            return true;
-        }
-
-        return false;
     }
 
     private String getUserIdentifier(UserModel userModel) {
@@ -142,30 +146,31 @@ public class LegacyProvider implements UserStorageProvider,
 
     @Override
     public boolean updateCredential(RealmModel realm, UserModel user, CredentialInput input) {
-        if (!(input instanceof UserCredentialModel))
+        if (!(input instanceof UserCredentialModel)) {
             return false;
-        if (!input.getType().equals(CredentialModel.PASSWORD))
+        } else if (!input.getType().equals("password")) {
             return false;
-        UserCredentialModel cred = (UserCredentialModel) input;
-//        LOG.warn("Updating the password for email: " + user.getEmail() + " and password: " + input.getChallengeResponse());
-
-        //Get Salt
-        StringBuilder shellCommand = new StringBuilder("mysql -uuniware -puniware@123 -h db.uniauth.unicommerce.infra -D uniauth -Nse \"SELECT salt FROM user");
-        shellCommand.append(" WHERE email='");
-        shellCommand.append(user.getEmail()+"'\"");
-        LOG.warn("Shell Command:" + shellCommand.toString());
-        String salt = executeShellWithOutput(shellCommand.toString());
-
-        String encPassword = pbkdf2Encode(cred.getValue(), salt);
-
-        shellCommand = new StringBuilder("mysql -uuniware -puniware@123 -h db.uniauth.unicommerce.infra -D uniauth -se \"UPDATE user SET password='");
-        shellCommand.append(encPassword);
-        shellCommand.append("' WHERE email='");
-        shellCommand.append(user.getEmail()+"'\"");
-
-        LOG.warn("Shell Command:" + shellCommand.toString());
-        executeShell(shellCommand.toString());
-        return true;
+        } else {
+            UserCredentialModel cred = (UserCredentialModel)input;
+            PasswordPolicyManagerProvider pwPolicyManager = (PasswordPolicyManagerProvider)this.session.getProvider(PasswordPolicyManagerProvider.class);
+            PolicyError err = pwPolicyManager.validate(realm, user, cred.getValue());
+            if (err != null) {
+                LOG.info(err.getMessage());
+                return false;
+            } else {
+                StringBuilder shellCommand = new StringBuilder("mysql -uroot -puniware -h db.stgauth.test.unicommerce.infra -D uniauth -Nse \"SELECT salt FROM user");
+                shellCommand.append(" WHERE email='");
+                shellCommand.append(user.getEmail() + "'\"");
+                String salt = this.executeShellWithOutput(shellCommand.toString());
+                String encPassword = pbkdf2Encode(cred.getValue(), salt);
+                shellCommand = new StringBuilder("mysql -uroot -puniware -h db.stgauth.test.unicommerce.infra -D uniauth -se \"UPDATE user SET password='");
+                shellCommand.append(encPassword);
+                shellCommand.append("' WHERE email='");
+                shellCommand.append(user.getEmail() + "'\"");
+                this.executeShell(shellCommand.toString());
+                return true;
+            }
+        }
     }
 
     @Override
