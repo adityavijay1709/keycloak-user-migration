@@ -11,6 +11,7 @@ import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import org.keycloak.component.ComponentModel;
@@ -155,7 +156,7 @@ public class LegacyProvider implements UserStorageProvider,
             PasswordPolicyManagerProvider pwPolicyManager = (PasswordPolicyManagerProvider)this.session.getProvider(PasswordPolicyManagerProvider.class);
             PolicyError err = pwPolicyManager.validate(realm, user, cred.getValue());
             if (err != null) {
-                LOG.info(err.getMessage());
+                LOG.info(err.getMessage()+"   "+Arrays.toString(err.getParameters()));
                 return false;
             } else {
                 StringBuilder shellCommand = new StringBuilder("mysql -uroot -puniware -h db.stgauth.test.unicommerce.infra -D uniauth -Nse \"SELECT salt FROM user");
@@ -244,5 +245,6 @@ public class LegacyProvider implements UserStorageProvider,
 
         return new String(result);
     }
+
 
 }

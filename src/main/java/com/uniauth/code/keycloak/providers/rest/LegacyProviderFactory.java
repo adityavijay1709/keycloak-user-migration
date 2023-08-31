@@ -32,7 +32,7 @@ public class LegacyProviderFactory implements UserStorageProviderFactory<LegacyP
             Field modifiers = field.getClass().getDeclaredField("modifiers");
             modifiers.setAccessible(true);
             modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-            field.set(userProvider, 60000L);
+            field.set(userProvider, 120000L);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -51,7 +51,7 @@ public class LegacyProviderFactory implements UserStorageProviderFactory<LegacyP
             Field modifiers = field.getClass().getDeclaredField("modifiers");
             modifiers.setAccessible(true);
             modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-            field.set(userProvider, 60000L);
+            field.set(userProvider, 120000L);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
