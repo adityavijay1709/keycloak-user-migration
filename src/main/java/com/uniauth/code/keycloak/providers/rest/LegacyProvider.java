@@ -4,35 +4,31 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUser;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUserService;
 import com.uniauth.code.keycloak.providers.rest.remote.UserModelFactory;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
-import java.security.NoSuchAlgorithmException;
-import java.security.spec.InvalidKeySpecException;
-import java.util.Arrays;
-import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import org.keycloak.component.ComponentModel;
-import org.keycloak.credential.CredentialInput;
-import org.keycloak.credential.CredentialInputUpdater;
-import org.keycloak.credential.CredentialInputValidator;
-import org.keycloak.credential.CredentialModel;
+import org.keycloak.credential.*;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.credential.PasswordCredentialModel;
 import org.keycloak.policy.PasswordPolicyManagerProvider;
+import org.keycloak.policy.PasswordPolicyProvider;
 import org.keycloak.policy.PolicyError;
 import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.user.UserLookupProvider;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
-import java.util.Collections;
-import java.util.Set;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Provides legacy user migration functionality
@@ -100,17 +96,25 @@ public class LegacyProvider implements UserStorageProvider,
         if (!this.supportsCredentialType(input.getType())) {
             return false;
         } else {
+            LOG.info("Input type = "+input.getType());
             String userIdentifier = this.getUserIdentifier(userModel);
-            LOG.info(this.session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel, userModel, "password").map((credentialModel) -> {
-                return credentialModel.getType() + " : " + credentialModel.getCredentialData();
-            }).collect(Collectors.toList()));
-            long localStorePasswordCount = this.session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel, userModel, "password").count();
-            if (localStorePasswordCount == 0L && this.legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
-                LOG.warn("Correct password entered for user-email: " + userModel.getEmail());
-                this.session.userCredentialManager().updateCredential(realmModel, userModel, input);
+            LOG.info("Fetching logs for old passwords using userCredentialManager ...");
+            Stream<CredentialModel> oldPasswords = this.session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel, userModel, "password");
+            //List<String> listOldPasswords = oldPasswords.sorted(CredentialModel.comparingByStartDateDesc()).map(model -> model.getCreatedDate() + model.getCredentialData()).collect(Collectors.toList());
+            List<String> listOldPasswords = oldPasswords.sorted(CredentialModel.comparingByStartDateDesc()).map(model -> model.getCreatedDate() + model.getCredentialData()).collect(Collectors.toList());
+            LOG.info("Printing the history of credentials for user:  "+userModel.getUsername());
+            listOldPasswords.forEach(LOG::info);
+            LOG.info("Validating password from legacy service url: ");
+
+
+
+            if (this.legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
+                LOG.info("Correct password entered for user-email: " + userModel.getEmail());
+                //this.session.userCredentialManager().updateCredential(realmModel, userModel, input);
+                LOG.info("Not using update on userCredentialManager...");
                 return true;
             } else {
-                LOG.warn("Incorrect passsword entered for user-email: " + userModel.getEmail());
+                LOG.info("Incorrect passsword entered for user-email: " + userModel.getEmail());
                 return false;
             }
         }
@@ -169,6 +173,11 @@ public class LegacyProvider implements UserStorageProvider,
                 shellCommand.append("' WHERE email='");
                 shellCommand.append(user.getEmail() + "'\"");
                 this.executeShell(shellCommand.toString());
+                CredentialProvider passwordProvider = session.getProvider(CredentialProvider.class, PasswordCredentialProviderFactory.PROVIDER_ID);
+                if(passwordProvider instanceof CredentialInputUpdater){
+                    LOG.info("Trying to update credentials in keycloak for user: "+user.getEmail());
+                    ((CredentialInputUpdater)passwordProvider).updateCredential(realm,user,input);
+                }
                 return true;
             }
         }
