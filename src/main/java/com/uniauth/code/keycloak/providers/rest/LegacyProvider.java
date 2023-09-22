@@ -5,6 +5,7 @@ import com.uniauth.code.keycloak.providers.rest.remote.LegacyUser;
 import com.uniauth.code.keycloak.providers.rest.remote.LegacyUserService;
 import com.uniauth.code.keycloak.providers.rest.remote.UserModelFactory;
 import org.jboss.logging.Logger;
+import org.keycloak.common.util.Time;
 import org.keycloak.component.ComponentModel;
 import org.keycloak.credential.*;
 import org.keycloak.models.KeycloakSession;
@@ -13,7 +14,6 @@ import org.keycloak.models.UserCredentialModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.credential.PasswordCredentialModel;
 import org.keycloak.policy.PasswordPolicyManagerProvider;
-import org.keycloak.policy.PasswordPolicyProvider;
 import org.keycloak.policy.PolicyError;
 import org.keycloak.storage.UserStorageProvider;
 import org.keycloak.storage.user.UserLookupProvider;
@@ -27,6 +27,7 @@ import java.io.UnsupportedEncodingException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -99,19 +100,13 @@ public class LegacyProvider implements UserStorageProvider,
             LOG.info("Input type = "+input.getType());
             String userIdentifier = this.getUserIdentifier(userModel);
             LOG.info("Fetching logs for old passwords using userCredentialManager ...");
-            Stream<CredentialModel> oldPasswords = this.session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel, userModel, "password");
-            //List<String> listOldPasswords = oldPasswords.sorted(CredentialModel.comparingByStartDateDesc()).map(model -> model.getCreatedDate() + model.getCredentialData()).collect(Collectors.toList());
-            List<String> listOldPasswords = oldPasswords.sorted(CredentialModel.comparingByStartDateDesc()).map(model -> model.getCreatedDate() + model.getCredentialData()).collect(Collectors.toList());
+            Stream<CredentialModel> oldPasswords = session.userCredentialManager().getStoredCredentialsByTypeStream(realmModel, userModel, "password");
+            List<Long> listOldPasswords = oldPasswords.sorted(CredentialModel.comparingByStartDateDesc()).map(model -> model.getCreatedDate()).collect(Collectors.toList());
             LOG.info("Printing the history of credentials for user:  "+userModel.getUsername());
             listOldPasswords.forEach(LOG::info);
             LOG.info("Validating password from legacy service url: ");
-
-
-
             if (this.legacyUserService.isPasswordValid(userIdentifier, input.getChallengeResponse())) {
                 LOG.info("Correct password entered for user-email: " + userModel.getEmail());
-                //this.session.userCredentialManager().updateCredential(realmModel, userModel, input);
-                LOG.info("Not using update on userCredentialManager...");
                 return true;
             } else {
                 LOG.info("Incorrect passsword entered for user-email: " + userModel.getEmail());
